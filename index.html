@@ -37,16 +37,44 @@
             display: block;
         }
 
-        #loading-text {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            font-size: 48px;
-            font-family: cursive;
-            text-align: center;
-        }
+        #loader {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 999999;
+    transition: opacity .5s ease;
+}
+
+#loader.hide {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.spinner {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    border: 6px solid rgba(255,255,255,.15);
+    border-top-color: white;
+    animation: spin .8s linear infinite;
+    margin-bottom: 24px;
+}
+
+#loading-text {
+    color: white;
+    font-size: 24px;
+    font-family: Arial, sans-serif;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
     </style>
 
     <script>
@@ -79,9 +107,19 @@
         function getParts(file, start, end) {
             const parts = [];
             for (let i = start; i <= end; i++) parts.push(`${file}.part${i}`);
-            max += end;
+            max += end - start + 1;
             return parts;
         }
+
+		function hideLoader() {
+    const loader = document.getElementById("loader");
+
+    loader.classList.add("hide");
+
+    setTimeout(() => {
+        loader.remove();
+    }, 500);
+}
 
         Promise.all([
             mergeFiles(getParts("Build/YandereSim.data.unityweb", 1, 5)),
@@ -109,15 +147,60 @@
             });
             const blobUrl = URL.createObjectURL(blob);
 
-            const gameInstance = UnityLoader.instantiate("unityContainer", json, {
-                url: blobUrl,
-                Module: {
-                    onRuntimeInitialized: () => {
-                        const loadingText = document.querySelector("#loading-text");
-                        if (loadingText) loadingText.remove();
-                    },
-                },
-            });
+            const gameInstance = UnityLoader.instantiate(
+    "unityContainer",
+    json,
+    {
+        url: blobUrl,
+
+        Module: {
+            onRuntimeInitialized: () => {
+
+                const canvas = document.querySelector("#unityContainer canvas");
+
+                function waitForFirstFrame() {
+
+                    if (!canvas) {
+                        requestAnimationFrame(waitForFirstFrame);
+                        return;
+                    }
+
+                    const gl = canvas.getContext("webgl2") ||
+                               canvas.getContext("webgl");
+
+                    if (!gl) {
+                        requestAnimationFrame(waitForFirstFrame);
+                        return;
+                    }
+
+                    const pixels = new Uint8Array(4);
+
+                    try {
+                        gl.readPixels(
+                            0,
+                            0,
+                            1,
+                            1,
+                            gl.RGBA,
+                            gl.UNSIGNED_BYTE,
+                            pixels
+                        );
+
+                        // Once rendering begins, remove the loader.
+                        hideLoader();
+
+                    } catch {
+
+                        requestAnimationFrame(waitForFirstFrame);
+
+                    }
+                }
+
+                requestAnimationFrame(waitForFirstFrame);
+            }
+        }
+    }
+);
 
             const resize = () => {
                 const container = document.getElementById("unityContainer");
@@ -131,16 +214,12 @@
 </head>
 
 <body>
-    <div id="loading-text" style="
-					color: white;
-					font-size: 48px;
-					font-family: 'Comic Sans MS', cursive;
-					text-align: center;
-					margin-top: 20px;
-				">
-        LOADING...
-    </div>LOADING...</div>
-    <div id="unityContainer"></div>
+   <div id="loader">
+    <div class="spinner"></div>
+    <div id="loading-text">Loading 0%</div>
+</div>
+
+<div id="unityContainer"></div>
 </body>
 
 </html>
